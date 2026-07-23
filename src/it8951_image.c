@@ -89,48 +89,18 @@ int it8951_display_image(it8951_t *dev, const char *path,
             if (px < 0 || px >= screen_w) continue;
             uint8_t val = resized[y * new_w + x];
             if (brightness != 1.0 && abs(val - bg_color) > 2) {
-                int boosted = (int)(val * brightness);
-                val = (uint8_t)(boosted > 255 ? 255 : boosted);
+                /* Gamma correction: val^(1/gamma) brightens midtones */
+                float norm = val / 255.0;
+                float corrected = pow(norm, 1.0 / brightness);
+                val = (uint8_t)(corrected * 255 + 0.5);
             }
             canvas[py * screen_w + px] = val;
         }
     }
 
-    /* Floyd-Steinberg dithering to 16 levels (multiples of 17) */
-    float *arr = malloc(screen_w * screen_h * sizeof(float));
-    for (int i = 0; i < screen_w * screen_h; i++)
-        arr[i] = canvas[i];
+    /* Display as 8bpp — no dithering, send raw grayscale directly */
+    it8951_display_8bpp(dev, canvas, 0, 0, screen_w, screen_h, mode);
 
-    uint8_t *out = malloc(screen_w * screen_h);
-    float step = 255.0 / 15;
-
-    for (int row = 0; row < screen_h; row++) {
-        for (int col = 0; col < screen_w; col++) {
-            int idx = row * screen_w + col;
-            float cur = arr[idx];
-            float q = round(cur / step) * step;
-            if (q < 0) q = 0;
-            if (q > 255) q = 255;
-            out[idx] = (uint8_t)q;
-            float err = cur - q;
-
-            if (col + 1 < screen_w)
-                arr[idx + 1] += err * 7 / 16;
-            if (row + 1 < screen_h) {
-                if (col > 0)
-                    arr[idx + screen_w - 1] += err * 3 / 16;
-                arr[idx + screen_w] += err * 5 / 16;
-                if (col + 1 < screen_w)
-                    arr[idx + screen_w + 1] += err * 1 / 16;
-            }
-        }
-    }
-
-    /* Display as 8bpp */
-    it8951_display_8bpp(dev, out, 0, 0, screen_w, screen_h, mode);
-
-    free(out);
-    free(arr);
     free(canvas);
     free(resized);
     stbi_image_free(img);
