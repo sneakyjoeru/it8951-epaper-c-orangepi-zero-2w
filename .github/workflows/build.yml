@@ -7,18 +7,28 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Set up QEMU for ARM64
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgpiod-dev libfreetype-dev gcc make
+          sudo apt-get install -y qemu-user-static
+
+      - name: Install aarch64 cross-compiler and libs
+        run: |
+          sudo dpkg --add-architecture arm64
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc-aarch64-linux-gnu \
+            libgpiod-dev:arm64 \
+            libfreetype-dev:arm64 \
+            libc6-dev-arm64-cross
 
       - name: Build
         run: |
-          gcc -Wall -O2 -Iinclude \
+          aarch64-linux-gnu-gcc -Wall -O2 -Iinclude \
             src/it8951_driver.c src/it8951_text.c src/it8951_image.c src/main.c \
             -o it8951 \
             -lgpiod -lfreetype -lm
