@@ -3,32 +3,26 @@ name: Build aarch64 binary
 on:
   push:
     branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    # Use native ARM runner for direct aarch64 compilation
+    runs-on: ubuntu-22.04-arm
+    if: false  # Disabled until ARM runner is available; build on Pi instead
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up QEMU for ARM64
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-user-static
-
-      - name: Install aarch64 cross-compiler and libs
-        run: |
-          sudo dpkg --add-architecture arm64
-          sudo apt-get update
-          sudo apt-get install -y \
-            gcc-aarch64-linux-gnu \
-            libgpiod-dev:arm64 \
-            libfreetype-dev:arm64 \
-            libc6-dev-arm64-cross
+          sudo apt-get install -y libgpiod-dev libfreetype-dev gcc make
 
       - name: Build
         run: |
-          aarch64-linux-gnu-gcc -Wall -O2 -Iinclude \
+          gcc -Wall -O2 -Iinclude \
             src/it8951_driver.c src/it8951_text.c src/it8951_image.c src/main.c \
             -o it8951 \
             -lgpiod -lfreetype -lm
