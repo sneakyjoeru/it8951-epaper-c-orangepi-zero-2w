@@ -2,28 +2,28 @@ name: Build aarch64 binary
 
 on:
   push:
-    tags: ['v*']
+    branches: [main]
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install aarch64 cross-compiler
+      - name: Install dependencies
         run: |
-          sudo dpkg --add-architecture arm64
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu libgpiod-dev:arm64 libfreetype-dev:arm64
+          sudo apt-get install -y libgpiod-dev libfreetype-dev gcc make
 
       - name: Build
         run: |
-          aarch64-linux-gnu-gcc -Wall -O2 -Iinclude \
+          gcc -Wall -O2 -Iinclude \
             src/it8951_driver.c src/it8951_text.c src/it8951_image.c src/main.c \
             -o it8951 \
             -lgpiod -lfreetype -lm
           file it8951
+          ls -la it8951
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
