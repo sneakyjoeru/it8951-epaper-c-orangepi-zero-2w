@@ -1,0 +1,13 @@
+# Build artifacts
+obj/
+it8951
+*.o
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
