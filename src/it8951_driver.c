@@ -121,13 +121,57 @@ static void write_data_bytes(it8951_t *dev, const uint8_t *data, int len)
     wait_busy(dev, 5000);
     cs_low(dev);
 
-    /* Send preamble first */
-    const uint8_t *txs[2];
-    int lens[2];
+    /* Send preamble + data in one ioctl call, no rx needed */
+    /* For large data, do preamble separately then data in chunks to avoid
+       allocating huge rx buffers in spi_multi_transfer */
+    struct spi_ioc_transfer xfers[2];
+    memset(xfers, 0, sizeof(xfers));
+
     uint8_t preamble[] = {0x00, 0x00};
-    txs[0] = preamble; lens[0] = 2;
-    txs[1] = data;     lens[1] = len;
-    spi_multi_transfer(dev->spi_fd, txs, NULL, lens, 2, dev->speed);
+    xfers[0].tx_buf = (unsigned long)preamble;
+    xfers[0].rx_buf = 0;  /* no rx */
+    xfers[0].len = 2;
+    xfers[0].speed_hz = dev->speed;
+    xfers[0].bits_per_word = 8;
+    xfers[0].cs_change = 0;
+
+    /* Send data in 4096-byte chunks via separate ioctls to avoid huge allocations */
+    /* First chunk goes with preamble */
+    int chunk = 4096;
+    if (len <= chunk) {
+        /* Small data: send preamble + data in one ioctl */
+        xfers[1].tx_buf = (unsigned long)data;
+        xfers[1].rx_buf = 0;
+        xfers[1].len = len;
+        xfers[1].speed_hz = dev->speed;
+        xfers[1].bits_per_word = 8;
+        xfers[1].cs_change = 0;
+
+        uint32_t msg = (1u << 30) | ((uint32_t)(sizeof(struct spi_ioc_transfer) * 2) << 16)
+                       | ((uint32_t)'k' << 8) | 0;
+        ioctl(dev->spi_fd, msg, xfers);
+    } else {
+        /* Large data: send preamble first, then data in chunks */
+        uint32_t msg1 = (1u << 30) | ((uint32_t)(sizeof(struct spi_ioc_transfer) * 1) << 16)
+                        | ((uint32_t)'k' << 8) | 0;
+        ioctl(dev->spi_fd, msg1, &xfers[0]);  /* preamble only */
+
+        struct spi_ioc_transfer data_xfer;
+        memset(&data_xfer, 0, sizeof(data_xfer));
+        data_xfer.tx_buf = (unsigned long)data;
+        data_xfer.rx_buf = 0;
+        data_xfer.speed_hz = dev->speed;
+        data_xfer.bits_per_word = 8;
+        data_xfer.cs_change = 0;
+
+        for (int off = 0; off < len; off += chunk) {
+            data_xfer.tx_buf = (unsigned long)(data + off);
+            data_xfer.len = (off + chunk <= len) ? chunk : (len - off);
+            uint32_t msg = (1u << 30) | ((uint32_t)(sizeof(struct spi_ioc_transfer)) << 16)
+                           | ((uint32_t)'k' << 8) | 0;
+            ioctl(dev->spi_fd, msg, &data_xfer);
+        }
+    }
 
     cs_high(dev);
 }
