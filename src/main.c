@@ -303,7 +303,7 @@ static void usage(const char *prog)
 int main(int argc, char *argv[])
 {
     int opt;
-    int do_info = 0, do_clear = 0, do_gradient = 0, do_quarter_flag = 0;
+    int do_info = 0, do_clear = 0, want_gradient = 0, do_quarter_flag = 0;
     int do_setup_flag = 0, do_server = 0;
     int checker = 0, cross = 0;
     int cross_invert = 0, cross_vertical = 0;
@@ -344,7 +344,7 @@ int main(int argc, char *argv[])
             case 'F': font_path = optarg; break;
             case 'm': image_path = optarg; break;
             case 'b': brightness = atof(optarg); break;
-            case 'g': do_gradient = 1; break;
+            case 'g': want_gradient = 1; break;
             case 'k': checker = optarg ? atoi(optarg) : 50; break;
             case 'x': cross = optarg ? atoi(optarg) : 9; break;
             case 'X': cross_invert = 1; break;
@@ -371,7 +371,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    int has_action = do_clear || text || image_path || do_gradient ||
+    int has_action = do_clear || text || image_path || want_gradient ||
                      checker || cross || do_quarter_flag || do_server;
 
     if (do_info || !has_action) {
@@ -405,7 +405,7 @@ int main(int argc, char *argv[])
         printf("Displayed.\n");
     }
 
-    if (do_gradient)
+    if (want_gradient)
         do_gradient(&dev);
 
     if (checker)
