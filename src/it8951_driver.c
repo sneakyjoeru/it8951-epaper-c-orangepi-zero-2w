@@ -429,16 +429,12 @@ int it8951_clear(it8951_t *dev, uint16_t mode)
     uint16_t w = dev->info.panel_w;
     uint16_t h = dev->info.panel_h;
 
-    /* 8bpp: send 0 (PIL black) → hardware shows white */
+    /* 8bpp: send 255 (inverted from 0=black → 255 → hardware shows white) */
     int total = w * h;
-    uint8_t *data = calloc(total, 1); /* all zeros = black → shows white */
+    uint8_t *data = malloc(total);
+    memset(data, 255, total); /* all 255 → after inversion in display_8bpp → 0 → hardware shows white */
 
-    set_target_mem_addr(dev, dev->info.mem_addr);
-    load_img_area_start(dev, IT8951_8BPP, 0, 0, w, h);
-    write_data_bytes(dev, data, total);
-    load_img_end(dev);
-    display_area(dev, 0, 0, w, h, mode);
-    wait_display_ready(dev);
+    it8951_display_8bpp(dev, data, 0, 0, w, h, mode);
 
     free(data);
     return 0;
@@ -447,12 +443,20 @@ int it8951_clear(it8951_t *dev, uint16_t mode)
 int it8951_display_8bpp(it8951_t *dev, const uint8_t *data,
                         uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t mode)
 {
+    int total = w * h;
+    /* Invert: 255-val (PIL 0=black → send 255 → hardware shows black) */
+    uint8_t *inverted = malloc(total);
+    for (int i = 0; i < total; i++)
+        inverted[i] = 255 - data[i];
+
     set_target_mem_addr(dev, dev->info.mem_addr);
     load_img_area_start(dev, IT8951_8BPP, x, y, w, h);
-    write_data_bytes(dev, data, w * h);
+    write_data_bytes(dev, inverted, total);
     load_img_end(dev);
     display_area(dev, x, y, w, h, mode);
     wait_display_ready(dev);
+
+    free(inverted);
     return 0;
 }
 
