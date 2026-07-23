@@ -1,6 +1,6 @@
 # IT8951 E-Paper Display Driver (C) — Orange Pi Zero 2W
 
-C port of the [Python IT8951 driver](https://github.com/sneakyjoeru/it8951-epaper)
+C port of the [Python IT8951 driver](https://github.com/sneakyjoeru/it8951-epaper-python-orangepi-zero-2w)
 for the **Waveshare 7.8" E-Ink HAT** (1872×1404, IT8951) on **Orange Pi Zero 2W**.
 
 Pre-built binary available — no compilation required on the Pi.
@@ -130,7 +130,7 @@ it8951-epaper-c/
 
 ## Hardware Setup
 
-See the [Python repo README](https://github.com/sneakyjoeru/it8951-epaper#os-configuration--bring-os-to-working-state)
+See the [Python repo README](https://github.com/sneakyjoeru/it8951-epaper-python-orangepi-zero-2w#os-configuration--bring-os-to-working-state)
 for detailed OS setup instructions. The `--setup` command automates most of it.
 
 GPIO pins: RST=226, CS=229, BUSY=228 (H616 port PH)
@@ -139,7 +139,7 @@ Boot overlay: `spi1-cs1-spidev` (frees GPIO 229 for manual CS control)
 ## Credits
 
 - Based on [Waveshare IT8951-ePaper](https://github.com/waveshare/IT8951-ePaper) C code
-- Python driver: [sneakyjoeru/it8951-epaper](https://github.com/sneakyjoeru/it8951-epaper)
+- Python driver: [sneakyjoeru/it8951-epaper-python-orangepi-zero-2w](https://github.com/sneakyjoeru/it8951-epaper-python-orangepi-zero-2w)
 - stb_image by Sean Barrett (public domain)
 
 ## License
