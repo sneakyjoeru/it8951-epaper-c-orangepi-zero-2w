@@ -8,7 +8,7 @@ INC_DIR = include
 SRCS = $(SRC_DIR)/it8951_driver.c $(SRC_DIR)/it8951_text.c $(SRC_DIR)/it8951_image.c $(SRC_DIR)/main.c
 
 CC = gcc
-CFLAGS = -Wall -O2 -I$(INC_DIR)
+CFLAGS = -Wall -O2 -I$(INC_DIR) -I/usr/include/freetype2
 LDFLAGS = -lgpiod -lfreetype -lm
 
 OBJ_DIR = obj
