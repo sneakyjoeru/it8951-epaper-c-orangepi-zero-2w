@@ -480,3 +480,78 @@ int it8951_display_4bpp(it8951_t *dev, const uint8_t *data,
     free(inverted);
     return 0;
 }
+
+/* ---- A2 fast clear (overlapped with data load) — ported from Python ---- */
+
+static void a2_fast_clear(it8951_t *dev)
+{
+    /* Fast ghosting clear using A2 mode — single black flash.
+       Loads 1bpp all-black and triggers A2 refresh. ~1.1s.
+       Overlaps with data loading — caller loads image data while A2 refreshes.
+       Does NOT wait for A2 to finish — caller must call wait_display_ready(). */
+    uint16_t w = dev->info.panel_w;
+    uint16_t h = dev->info.panel_h;
+    int bpr = w / 8;
+    int total = bpr * h;
+    if (total % 2) total++;
+
+    uint16_t val = read_reg(dev, UP1SR + 2);
+    write_reg(dev, UP1SR + 2, val | (1u << 2));
+    write_reg(dev, BGVR, (0x00 << 8) | 0xFF);
+
+    uint8_t *black = malloc(total);
+    memset(black, 0xFF, total);
+
+    set_target_mem_addr(dev, dev->info.mem_addr);
+    load_img_area_start(dev, IT8951_8BPP, 0, 0, w / 8, h);
+    write_data_bytes(dev, black, total);
+    load_img_end(dev);
+    display_area(dev, 0, 0, w, h, dev->info.a2_mode);
+    /* DON'T wait — let caller load data during refresh */
+
+    free(black);
+}
+
+static void a2_disable_1bpp(it8951_t *dev)
+{
+    uint16_t val = read_reg(dev, UP1SR + 2);
+    write_reg(dev, UP1SR + 2, val & ~(1u << 2));
+}
+
+int it8951_clear_then_display_4bpp(it8951_t *dev, const uint8_t *data,
+                                   uint16_t w, uint16_t h, uint16_t mode)
+{
+    /* Fast clear + 4bpp render: A2 black flash + 4bpp load overlapped + GC16.
+       ~5.2s total (A2 clear + data load happen simultaneously).
+       Ported from Python clear_then_display_4bpp. */
+    int bpr = (w * 4 + 7) / 8;
+    int total = bpr * h;
+
+    /* Global color inversion: invert each 4bpp nibble */
+    uint8_t *inverted = malloc(total);
+    for (int i = 0; i < total; i++) {
+        uint8_t hi = (data[i] >> 4) & 0x0F;
+        uint8_t lo = data[i] & 0x0F;
+        inverted[i] = ((15 - hi) << 4) | (15 - lo);
+    }
+
+    /* 1. A2 black flash (triggers refresh, doesn't wait) */
+    a2_fast_clear(dev);
+
+    /* 2. Load 4bpp data WHILE A2 refreshes (SPI is free during LUT refresh) */
+    set_target_mem_addr(dev, dev->info.mem_addr);
+    load_img_area_start(dev, IT8951_4BPP, 0, 0, w, h);
+    write_data_bytes(dev, inverted, total);
+    load_img_end(dev);
+
+    /* 3. Wait for A2 to finish */
+    wait_display_ready(dev);
+    a2_disable_1bpp(dev);
+
+    /* 4. GC16 render (data already loaded, ~0.5s) */
+    display_area(dev, 0, 0, w, h, mode);
+    wait_display_ready(dev);
+
+    free(inverted);
+    return 0;
+}

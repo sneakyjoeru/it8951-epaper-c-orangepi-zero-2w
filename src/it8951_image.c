@@ -80,7 +80,21 @@ int it8951_display_image(it8951_t *dev, const char *path,
     int off_x = (screen_w - new_w) / 2;
     int off_y = (screen_h - new_h) / 2;
 
-    /* Paste and apply brightness boost to non-background pixels */
+    /* Precompute gamma LUT once (instant lookup, no per-pixel pow) */
+    uint8_t gamma_lut[256];
+    if (brightness != 1.0f) {
+        float inv_gamma = 1.0f / brightness;
+        for (int i = 0; i < 256; i++) {
+            float norm = (float)i / 255.0f;
+            float corrected = powf(norm, inv_gamma);
+            int v = (int)(corrected * 255.0f + 0.5f);
+            gamma_lut[i] = (v < 0) ? 0 : (v > 255 ? 255 : (uint8_t)v);
+        }
+    } else {
+        for (int i = 0; i < 256; i++) gamma_lut[i] = (uint8_t)i;
+    }
+
+    /* Paste and apply gamma boost to non-background pixels */
     for (int y = 0; y < new_h; y++) {
         int py = off_y + y;
         if (py < 0 || py >= screen_h) continue;
@@ -88,19 +102,34 @@ int it8951_display_image(it8951_t *dev, const char *path,
             int px = off_x + x;
             if (px < 0 || px >= screen_w) continue;
             uint8_t val = resized[y * new_w + x];
-            if (brightness != 1.0 && abs(val - bg_color) > 2) {
-                /* Gamma correction: val^(1/gamma) brightens midtones */
-                float norm = val / 255.0;
-                float corrected = pow(norm, 1.0 / brightness);
-                val = (uint8_t)(corrected * 255 + 0.5);
+            if (abs(val - bg_color) > 2) {
+                val = gamma_lut[val];
             }
             canvas[py * screen_w + px] = val;
         }
     }
 
-    /* Display as 8bpp — no dithering, send raw grayscale directly */
-    it8951_display_8bpp(dev, canvas, 0, 0, screen_w, screen_h, mode);
+    /* Pack canvas to 4bpp (0=white, 15=black). 0.5× the SPI data of 8bpp.
+       PIL L: 0=black, 255=white. 4bpp: 0=white, 15=black. */
+    int pack_w = screen_w;
+    if (pack_w % 2) pack_w++;  /* even cols → high nibble, odd cols → low */
+    int bpr = pack_w / 2;
+    uint8_t *packed = malloc(bpr * screen_h);
+    for (int y = 0; y < screen_h; y++) {
+        for (int x = 0; x < screen_w; x += 2) {
+            uint8_t g0 = (uint8_t)(15 - (canvas[y * screen_w + x] / 17));
+            uint8_t g1 = (x + 1 < screen_w)
+                       ? (uint8_t)(15 - (canvas[y * screen_w + x + 1] / 17))
+                       : 0;
+            packed[y * bpr + x / 2] = (g0 << 4) | g1;
+        }
+    }
 
+    /* Use clear_then_display_4bpp: A2 black flash overlapped with 4bpp load.
+       ~5.2s total vs ~7s sequential. */
+    it8951_clear_then_display_4bpp(dev, packed, screen_w, screen_h, mode);
+
+    free(packed);
     free(canvas);
     free(resized);
     stbi_image_free(img);

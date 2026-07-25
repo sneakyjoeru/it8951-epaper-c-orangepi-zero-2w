@@ -18,8 +18,9 @@ Pre-built binary available — no compilation required on the Pi.
 
 ```bash
 # Download binary to the Pi
-scp it8951 orangepi@192.168.0.199:~/
+scp bin/it8951-aarch64 orangepi@192.168.0.199:~/it8951
 ssh orangepi@192.168.0.199
+chmod +x it8951
 
 # Run setup (configures boot overlay + installs packages)
 sudo ./it8951 --setup
@@ -30,6 +31,21 @@ sudo ./it8951 --info
 sudo ./it8951 --clear
 sudo ./it8951 --text "Hello, World!"
 ```
+
+## Performance (image render, 4096×4096 → 1872×1404)
+
+| Version | Avg time | Notes |
+|---------|---------|-------|
+| C (this repo) | **~4.1s** | gamma LUT + 4bpp packing + overlapped A2 clear |
+| Python | ~9.2s | baseline (PIL + numpy) |
+
+The C port is ~2.25× faster than the Python original. The speedups ported
+from the Python optimization work:
+
+1. **Gamma LUT** — precomputed 256-entry lookup table (no per-pixel `powf`)
+2. **4bpp packing** — half the SPI data vs 8bpp (1.3 MB vs 2.6 MB transfer)
+3. **Overlapped A2 clear** — A2 black-flash refresh overlaps with 4bpp data
+   load (`it8951_clear_then_display_4bpp`), saving ~1.5s vs sequential clear+render
 
 ## Building from Source
 

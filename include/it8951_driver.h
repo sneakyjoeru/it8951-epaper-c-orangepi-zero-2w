@@ -97,6 +97,11 @@ int it8951_display_8bpp(it8951_t *dev, const uint8_t *data,
 int it8951_display_4bpp(it8951_t *dev, const uint8_t *data,
                         uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t mode);
 
+/* Fast clear + display: A2 black flash overlapped with 4bpp data load + GC16.
+   ~5.2s total vs sequential ~7s. Ported from Python clear_then_display_4bpp. */
+int it8951_clear_then_display_4bpp(it8951_t *dev, const uint8_t *data,
+                                   uint16_t w, uint16_t h, uint16_t mode);
+
 /* Text rendering (requires libfreetype) */
 int it8951_display_text(it8951_t *dev, const char *text, int font_size,
                         const char *font_path, uint8_t bg_color, uint8_t fg_color,

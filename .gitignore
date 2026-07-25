@@ -1,12 +1,14 @@
 # Build artifacts
 obj/
-it8951
 *.o
+it8951
+!bin/it8951-aarch64
 
 # IDE
 .vscode/
 .idea/
 *.swp
+*.swo
 *~
 
 # OS
