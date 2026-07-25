@@ -67,6 +67,7 @@ make
 sudo ./it8951 --info
 sudo ./it8951 --clear
 sudo ./it8951 --text "Hello, Orange Pi!" --font-size 96
+sudo ./it8951 --image docs/test_image.jpg   # bundled sample (4096×4096)
 sudo ./it8951 --image photo.jpg
 sudo ./it8951 --gradient
 sudo ./it8951 --cross 9
