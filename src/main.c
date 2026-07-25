@@ -266,8 +266,40 @@ static int do_setup()
         printf("   Run: sudo reboot\n");
     }
 
+    /* 4. Verify GPIO lines are free for manual control (RST=226, BUSY=228, CS=229).
+       The Waveshare HAT needs GPIO 229 (physical SPI1 CS0) driven manually via
+       libgpiod, so the kernel must NOT have claimed it. With the spi1-cs1-spidev
+       overlay, only CS1 is enabled and GPIO 229 stays free. */
+    printf("\n4. Verifying GPIO lines (RST=226, BUSY=228, CS=229)...\n");
+    int gpio_ok = 1;
+    int found_226 = 0, found_228 = 0, found_229 = 0;
+    {
+        /* /sys/kernel/debug/gpio is only readable by root — use popen with sudo. */
+        FILE *gf = popen("sudo cat /sys/kernel/debug/gpio 2>/dev/null", "r");
+        if (gf) {
+            char gline[256];
+            while (fgets(gline, sizeof(gline), gf)) {
+                if (strstr(gline, "gpio-226")) found_226 = 1;
+                if (strstr(gline, "gpio-228")) found_228 = 1;
+                if (strstr(gline, "gpio-229")) found_229 = 1;
+            }
+            pclose(gf);
+        }
+    }
+
+    printf("   GPIO 226 (RST):  %s\n",   found_226 ? "kernel-claimed ✗ (reboot may free it)" : "free ✓");
+    printf("   GPIO 228 (BUSY): %s\n",   found_228 ? "kernel-claimed ✗ (reboot may free it)" : "free ✓");
+    printf("   GPIO 229 (CS):   %s\n",   found_229 ? "kernel-claimed ✗ — overlay not applied, reboot needed" : "free ✓ (manual CS ready)");
+    if (found_226 || found_228 || found_229) gpio_ok = 0;
+
     printf("\n=== Setup complete! ===\n");
-    printf("If reboot was needed, run 'sudo reboot' then run './it8951 --info'\n");
+    int need_reboot = (access("/dev/spidev1.1", F_OK) != 0) || !gpio_ok;
+    if (need_reboot) {
+        printf("⚠️  Reboot required. Run: sudo reboot\n");
+        printf("   After reboot, run: sudo ./it8951 --info\n");
+    } else {
+        printf("✓  Ready! Run: sudo ./it8951 --info\n");
+    }
     return 0;
 }
 

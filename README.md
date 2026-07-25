@@ -77,15 +77,16 @@ sudo ./it8951 --quarter
 ## OS Setup
 
 The `--setup` command automatically:
-1. Installs required packages (libgpiod-dev, libfreetype-dev, gcc, make)
+1. Installs required packages (libgpiod-dev, libfreetype-dev, gcc, make + python3-pil/libgpiod/spidev/numpy)
 2. Configures the boot overlay to `spi1-cs1-spidev` (frees GPIO 229 for manual CS)
 3. Checks if `/dev/spidev1.1` exists (prompts reboot if not)
+4. Verifies GPIO lines 226 (RST), 228 (BUSY), 229 (CS) are free for manual control — if any is kernel-claimed, prompts reboot
 
 ```bash
 sudo ./it8951 --setup
 ```
 
-If the overlay was changed, reboot:
+If the overlay was changed or any GPIO is kernel-claimed, reboot:
 ```bash
 sudo reboot
 ```
