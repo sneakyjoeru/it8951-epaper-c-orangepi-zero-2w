@@ -109,36 +109,8 @@ int it8951_display_image(it8951_t *dev, const char *path,
         }
     }
 
-    /* Floyd-Steinberg dither to 16 gray levels (GC16 hardware limit).
-       Without this, the hardware truncates 256→16 levels creating banding
-       and aliased text. Error diffusion spreads the quantization error
-       across neighboring pixels, preserving the appearance of smooth edges. */
-    {
-        float *errors = calloc(screen_w * screen_h, sizeof(float));
-        for (int y = 0; y < screen_h; y++) {
-            for (int x = 0; x < screen_w; x++) {
-                int idx = y * screen_w + x;
-                float val = (float)canvas[idx] + errors[idx];
-                /* Quantize to 16 levels: 0,17,34,...,255 */
-                int q = (int)(val / 17.0f + 0.5f);
-                if (q < 0) q = 0;
-                if (q > 15) q = 15;
-                uint8_t quantized = (uint8_t)(q * 17);
-                canvas[idx] = quantized;
-                /* Propagate error */
-                float err = val - (float)quantized;
-                if (x + 1 < screen_w) errors[idx + 1] += err * 7.0f / 16.0f;
-                if (y + 1 < screen_h) {
-                    if (x > 0)            errors[idx + screen_w - 1] += err * 3.0f / 16.0f;
-                                          errors[idx + screen_w]     += err * 5.0f / 16.0f;
-                    if (x + 1 < screen_w) errors[idx + screen_w + 1] += err * 1.0f / 16.0f;
-                }
-            }
-        }
-        free(errors);
-    }
-
-    it8951_display_8bpp(dev, canvas, 0, 0, screen_w, screen_h, GL16_MODE);
+    /* Display as 8bpp — hardware handles grayscale internally */
+    it8951_display_8bpp(dev, canvas, 0, 0, screen_w, screen_h, GC16_MODE);
 
     free(canvas);
     free(resized);

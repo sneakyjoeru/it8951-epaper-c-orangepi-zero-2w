@@ -151,34 +151,11 @@ int it8951_display_diff(it8951_t *dev, const uint8_t *new_data,
     old_data = stbi_load(LAST_IMG_PATH, &old_w, &old_h, &old_ch, 1);
 
     if (!old_data || old_w != screen_w || old_h != screen_h) {
-        /* No previous image — full refresh with FS dithering */
+        /* No previous image — full refresh, plain 8bpp */
         if (old_data) stbi_image_free(old_data);
-        printf("diff: no previous image, doing full refresh (FS-dithered)\n");
-        uint8_t *dithered = malloc(screen_w * screen_h);
-        memcpy(dithered, new_data, screen_w * screen_h);
-        float *errors = calloc(screen_w * screen_h, sizeof(float));
-        for (int y = 0; y < screen_h; y++) {
-            for (int x = 0; x < screen_w; x++) {
-                int idx = y * screen_w + x;
-                float val = (float)dithered[idx] + errors[idx];
-                int q = (int)(val / 17.0f + 0.5f);
-                if (q < 0) q = 0;
-                if (q > 15) q = 15;
-                uint8_t quantized = (uint8_t)(q * 17);
-                dithered[idx] = quantized;
-                float err = val - (float)quantized;
-                if (x + 1 < screen_w) errors[idx + 1] += err * 7.0f / 16.0f;
-                if (y + 1 < screen_h) {
-                    if (x > 0)            errors[idx + screen_w - 1] += err * 3.0f / 16.0f;
-                                          errors[idx + screen_w]     += err * 5.0f / 16.0f;
-                    if (x + 1 < screen_w) errors[idx + screen_w + 1] += err * 1.0f / 16.0f;
-                }
-            }
-        }
-        free(errors);
-        it8951_display_8bpp(dev, dithered, 0, 0, screen_w, screen_h, GL16_MODE);
-        free(dithered);
-        /* Save current as last (save the pre-dither version for accurate diff) */
+        printf("diff: no previous image, doing full refresh\n");
+        it8951_display_8bpp(dev, new_data, 0, 0, screen_w, screen_h, GC16_MODE);
+        /* Save current as last */
         stbi_write_png(LAST_IMG_PATH, screen_w, screen_h, 1, new_data, screen_w);
         return 0;
     }
@@ -227,60 +204,23 @@ int it8951_display_diff(it8951_t *dev, const uint8_t *new_data,
     if (mode == DIFF_MODE_HARD) {
         /* Hard refresh: white-flash region first, then draw */
         printf("diff: hard refresh (white flash + GC16)\n");
-        /* Clear region to white (255=white in 8bpp) */
         uint8_t *white = malloc(rw * rh);
         memset(white, 255, rw * rh);
-        it8951_display_8bpp(dev, white, rx, ry, rw, rh, GL16_MODE);
+        it8951_display_8bpp(dev, white, rx, ry, rw, rh, GC16_MODE);
         free(white);
-        /* Now draw the actual content */
-        it8951_display_8bpp(dev, region, rx, ry, rw, rh, GL16_MODE);
+        it8951_display_8bpp(dev, region, rx, ry, rw, rh, GC16_MODE);
     } else if (mode == DIFF_MODE_SMOOTH) {
-        /* Smooth refresh: A2 fast mode, 1-bit dithered, no flash */
-        printf("diff: smooth refresh (A2, 1-bit dithered)\n");
-        /* Convert region to 1-bit using Floyd-Steinberg dithering */
+        /* Smooth refresh: A2 fast mode, 1-bit, no flash */
+        printf("diff: smooth refresh (A2, 1-bit)\n");
         uint8_t *bw = malloc(rw * rh);
-        float *fs_errors = calloc(rw * rh, sizeof(float));
-        for (int y = 0; y < rh; y++) {
-            for (int x = 0; x < rw; x++) {
-                float val = (float)region[y * rw + x] + fs_errors[y * rw + x];
-                uint8_t q = (val < 128) ? 0 : 255;
-                bw[y * rw + x] = q;
-                float err = val - (float)q;
-                if (x + 1 < rw) fs_errors[y * rw + (x+1)] += err * 7.0f / 16.0f;
-                if (y + 1 < rh) {
-                    if (x > 0)      fs_errors[(y+1) * rw + (x-1)] += err * 3.0f / 16.0f;
-                                    fs_errors[(y+1) * rw + x]   += err * 5.0f / 16.0f;
-                    if (x + 1 < rw) fs_errors[(y+1) * rw + (x+1)] += err * 1.0f / 16.0f;
-                }
-            }
-        }
-        free(fs_errors);
+        for (int i = 0; i < rw * rh; i++)
+            bw[i] = (region[i] < 128) ? 0 : 255;
         it8951_display_8bpp(dev, bw, rx, ry, rw, rh, A2_MODE);
         free(bw);
     } else {
-        /* Soft refresh: GC16 with Floyd-Steinberg dither to 16 levels */
-        printf("diff: soft refresh (GC16, FS-dithered)\n");
-        float *fs_err = calloc(rw * rh, sizeof(float));
-        for (int y = 0; y < rh; y++) {
-            for (int x = 0; x < rw; x++) {
-                int idx = y * rw + x;
-                float val = (float)region[idx] + fs_err[idx];
-                int q = (int)(val / 17.0f + 0.5f);
-                if (q < 0) q = 0;
-                if (q > 15) q = 15;
-                uint8_t quantized = (uint8_t)(q * 17);
-                region[idx] = quantized;
-                float err = val - (float)quantized;
-                if (x + 1 < rw) fs_err[idx + 1] += err * 7.0f / 16.0f;
-                if (y + 1 < rh) {
-                    if (x > 0)      fs_err[idx + rw - 1] += err * 3.0f / 16.0f;
-                                    fs_err[idx + rw]     += err * 5.0f / 16.0f;
-                    if (x + 1 < rw) fs_err[idx + rw + 1] += err * 1.0f / 16.0f;
-                }
-            }
-        }
-        free(fs_err);
-        it8951_display_8bpp(dev, region, rx, ry, rw, rh, GL16_MODE);
+        /* Soft refresh: plain 8bpp GC16, no software dithering */
+        printf("diff: soft refresh (GC16, 8bpp)\n");
+        it8951_display_8bpp(dev, region, rx, ry, rw, rh, GC16_MODE);
     }
 
     /* Save current image as last */
@@ -378,31 +318,7 @@ int it8951_display_image_diff(it8951_t *dev, const char *path,
         }
     }
 
-    /* Floyd-Steinberg dither to 16 gray levels before diff */
-    {
-        float *errors = calloc(screen_w * screen_h, sizeof(float));
-        for (int y = 0; y < screen_h; y++) {
-            for (int x = 0; x < screen_w; x++) {
-                int idx = y * screen_w + x;
-                float val = (float)canvas[idx] + errors[idx];
-                int q = (int)(val / 17.0f + 0.5f);
-                if (q < 0) q = 0;
-                if (q > 15) q = 15;
-                uint8_t quantized = (uint8_t)(q * 17);
-                canvas[idx] = quantized;
-                float err = val - (float)quantized;
-                if (x + 1 < screen_w) errors[idx + 1] += err * 7.0f / 16.0f;
-                if (y + 1 < screen_h) {
-                    if (x > 0)            errors[idx + screen_w - 1] += err * 3.0f / 16.0f;
-                                          errors[idx + screen_w]     += err * 5.0f / 16.0f;
-                    if (x + 1 < screen_w) errors[idx + screen_w + 1] += err * 1.0f / 16.0f;
-                }
-            }
-        }
-        free(errors);
-    }
-
-    /* Differential update */
+    /* Differential update — plain 8bpp, no software dithering */
     int ret = it8951_display_diff(dev, canvas, screen_w, screen_h,
                                   mode, border, 5);
 
