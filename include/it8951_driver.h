@@ -40,7 +40,10 @@
 
 /* ---- Refresh modes ---- */
 #define INIT_MODE 0
+#define GLD16_MODE 1  /* Gray Low + Display — good for text */
 #define GC16_MODE 2
+#define GL16_MODE 3   /* Gray Low 16 — less ghosting, good for text */
+#define GLR16_MODE 4  /* Gray Low + Refresh */
 #define A2_MODE   6  /* default for M841_TFA2812 (7.8") */
 
 /* ---- Pixel formats ---- */

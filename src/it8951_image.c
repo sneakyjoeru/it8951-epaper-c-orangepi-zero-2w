@@ -138,7 +138,7 @@ int it8951_display_image(it8951_t *dev, const char *path,
         free(errors);
     }
 
-    it8951_display_8bpp(dev, canvas, 0, 0, screen_w, screen_h, mode);
+    it8951_display_8bpp(dev, canvas, 0, 0, screen_w, screen_h, GL16_MODE);
 
     free(canvas);
     free(resized);

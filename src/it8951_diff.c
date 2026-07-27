@@ -154,7 +154,7 @@ int it8951_display_diff(it8951_t *dev, const uint8_t *new_data,
         /* No previous image — full refresh */
         if (old_data) stbi_image_free(old_data);
         printf("diff: no previous image, doing full refresh\n");
-        it8951_display_8bpp(dev, new_data, 0, 0, screen_w, screen_h, GC16_MODE);
+        it8951_display_8bpp(dev, new_data, 0, 0, screen_w, screen_h, GL16_MODE);
         /* Save current as last */
         stbi_write_png(LAST_IMG_PATH, screen_w, screen_h, 1, new_data, screen_w);
         return 0;
@@ -207,10 +207,10 @@ int it8951_display_diff(it8951_t *dev, const uint8_t *new_data,
         /* Clear region to white (255=white in 8bpp) */
         uint8_t *white = malloc(rw * rh);
         memset(white, 255, rw * rh);
-        it8951_display_8bpp(dev, white, rx, ry, rw, rh, GC16_MODE);
+        it8951_display_8bpp(dev, white, rx, ry, rw, rh, GL16_MODE);
         free(white);
         /* Now draw the actual content */
-        it8951_display_8bpp(dev, region, rx, ry, rw, rh, GC16_MODE);
+        it8951_display_8bpp(dev, region, rx, ry, rw, rh, GL16_MODE);
     } else if (mode == DIFF_MODE_SMOOTH) {
         /* Smooth refresh: A2 fast mode, 1-bit dithered, no flash */
         printf("diff: smooth refresh (A2, 1-bit dithered)\n");
@@ -257,7 +257,7 @@ int it8951_display_diff(it8951_t *dev, const uint8_t *new_data,
             }
         }
         free(fs_err);
-        it8951_display_8bpp(dev, region, rx, ry, rw, rh, GC16_MODE);
+        it8951_display_8bpp(dev, region, rx, ry, rw, rh, GL16_MODE);
     }
 
     /* Save current image as last */
