@@ -216,7 +216,7 @@ int it8951_display_diff(it8951_t *dev, const uint8_t *new_data,
                         screen_w, screen_h, border);
 
     /* Send to display */
-    if (mode == 1) {
+    if (mode == DIFF_MODE_HARD) {
         /* Hard refresh: white-flash region first, then draw */
         printf("diff: hard refresh (white flash + GC16)\n");
         /* Clear region to white (255=white in 8bpp) */
@@ -226,8 +226,31 @@ int it8951_display_diff(it8951_t *dev, const uint8_t *new_data,
         free(white);
         /* Now draw the actual content */
         it8951_display_8bpp(dev, region, rx, ry, rw, rh, GC16_MODE);
+    } else if (mode == DIFF_MODE_SMOOTH) {
+        /* Smooth refresh: A2 fast mode, 1-bit dithered, no flash */
+        printf("diff: smooth refresh (A2, 1-bit dithered)\n");
+        /* Convert region to 1-bit using Floyd-Steinberg dithering */
+        uint8_t *bw = malloc(rw * rh);
+        float *fs_errors = calloc(rw * rh, sizeof(float));
+        for (int y = 0; y < rh; y++) {
+            for (int x = 0; x < rw; x++) {
+                float val = (float)region[y * rw + x] + fs_errors[y * rw + x];
+                uint8_t q = (val < 128) ? 0 : 255;
+                bw[y * rw + x] = q;
+                float err = val - (float)q;
+                if (x + 1 < rw) fs_errors[y * rw + (x+1)] += err * 7.0f / 16.0f;
+                if (y + 1 < rh) {
+                    if (x > 0)      fs_errors[(y+1) * rw + (x-1)] += err * 3.0f / 16.0f;
+                                    fs_errors[(y+1) * rw + x]   += err * 5.0f / 16.0f;
+                    if (x + 1 < rw) fs_errors[(y+1) * rw + (x+1)] += err * 1.0f / 16.0f;
+                }
+            }
+        }
+        free(fs_errors);
+        it8951_display_8bpp(dev, bw, rx, ry, rw, rh, A2_MODE);
+        free(bw);
     } else {
-        /* Soft refresh: just draw over old content */
+        /* Soft refresh: just draw over old content (GC16) */
         printf("diff: soft refresh (GC16 only)\n");
         it8951_display_8bpp(dev, region, rx, ry, rw, rh, GC16_MODE);
     }

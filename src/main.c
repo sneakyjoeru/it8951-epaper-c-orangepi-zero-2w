@@ -329,6 +329,7 @@ static void usage(const char *prog)
     printf("  --set-vcom N          Set VCOM (millivolts, e.g. 2510 = -2.51V)\n");
     printf("  --hard                Regional hard refresh (white flash + GC16)\n");
     printf("  --soft                Regional soft refresh (GC16 only, no blink)\n");
+    printf("  --smooth              Regional smooth refresh (A2, 1-bit, no flash)\n");
     printf("  --border-smooth N     Border expansion for dithering (default: 20)\n");
     printf("\n");
     printf("Regional update modes (--hard/--soft) compare the new image against\n");
@@ -374,6 +375,7 @@ int main(int argc, char *argv[])
         {"set-vcom",       required_argument, 0, 'v'},
         {"hard",           no_argument,       0, 'H'},
         {"soft",           no_argument,       0, 'O'},
+        {"smooth",         no_argument,       0, 'A'},
         {"border-smooth",  required_argument, 0, 'B'},
         {"help",           no_argument,       0, 'h'},
         {0, 0, 0, 0}
@@ -401,6 +403,7 @@ int main(int argc, char *argv[])
             case 'v': set_vcom = atoi(optarg); break;
             case 'H': diff_mode = DIFF_MODE_HARD; break;
             case 'O': diff_mode = DIFF_MODE_SOFT; break;
+            case 'A': diff_mode = DIFF_MODE_SMOOTH; break;
             case 'B': border_smooth = atoi(optarg); break;
             case 'h': usage(argv[0]); return 0;
             default: usage(argv[0]); return 1;

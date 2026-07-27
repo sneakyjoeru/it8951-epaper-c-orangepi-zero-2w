@@ -121,8 +121,9 @@ void it8951_sleep(it8951_t *dev);
 /* ---- Regional differential update (it8951_diff.c) ---- */
 
 /* Refresh modes for diff update */
-#define DIFF_MODE_SOFT 0   /* GC16 only, no blinking */
-#define DIFF_MODE_HARD 1   /* White-flash region then GC16 */
+#define DIFF_MODE_SOFT   0   /* GC16 only, no blinking */
+#define DIFF_MODE_HARD   1   /* White-flash region then GC16 */
+#define DIFF_MODE_SMOOTH 2   /* A2 fast mode, 1-bit dithered, no flash */
 
 /* Display with differential regional update.
    Compares new_data against last displayed image (stored at /tmp/it8951_last.png).
