@@ -235,8 +235,28 @@ int it8951_display_diff(it8951_t *dev, const uint8_t *new_data,
         it8951_display_8bpp(dev, bw, rx, ry, rw, rh, A2_MODE);
         free(bw);
     } else {
-        /* Soft refresh: just draw over old content (GC16) */
-        printf("diff: soft refresh (GC16 only)\n");
+        /* Soft refresh: GC16 with Floyd-Steinberg dither to 16 levels */
+        printf("diff: soft refresh (GC16, FS-dithered)\n");
+        float *fs_err = calloc(rw * rh, sizeof(float));
+        for (int y = 0; y < rh; y++) {
+            for (int x = 0; x < rw; x++) {
+                int idx = y * rw + x;
+                float val = (float)region[idx] + fs_err[idx];
+                int q = (int)(val / 17.0f + 0.5f);
+                if (q < 0) q = 0;
+                if (q > 15) q = 15;
+                uint8_t quantized = (uint8_t)(q * 17);
+                region[idx] = quantized;
+                float err = val - (float)quantized;
+                if (x + 1 < rw) fs_err[idx + 1] += err * 7.0f / 16.0f;
+                if (y + 1 < rh) {
+                    if (x > 0)      fs_err[idx + rw - 1] += err * 3.0f / 16.0f;
+                                    fs_err[idx + rw]     += err * 5.0f / 16.0f;
+                    if (x + 1 < rw) fs_err[idx + rw + 1] += err * 1.0f / 16.0f;
+                }
+            }
+        }
+        free(fs_err);
         it8951_display_8bpp(dev, region, rx, ry, rw, rh, GC16_MODE);
     }
 
