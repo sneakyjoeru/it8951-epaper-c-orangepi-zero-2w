@@ -13,6 +13,8 @@ Pre-built binary available — no compilation required on the Pi.
 - 🎨 Test patterns (gradient, checkerboard, cross, quarter)
 - 🔧 OS setup mode (`--setup` configures overlay + installs packages)
 - 🌫️ Random dithering for smooth gradients
+- 🔄 **Regional differential updates** — only refreshes changed areas
+  (with `--hard`/`--soft` modes and configurable border dithering)
 
 ![SneakyJoe Avatar on E-Ink](https://media.discordapp.net/attachments/337997702170279946/1529633966275952680/PXL_20260722_233745690.MP.jpg?ex=6a62a624&is=6a6154a4&hm=1f21369a3ffde08f96da7da189940bb5c3112ee617fe67bf23216b8fe44c492a&animated=true&width=1785&height=1344)
 ![Cross gradient](https://media.discordapp.net/attachments/337997702170279946/1529633967135916152/PXL_20260722_233342804.MP.jpg?ex=6a62a624&is=6a6154a4&hm=afe63f23d5c7e0f8e3c7cf0a5f4369fe5ec5f6f170590d4f3f7f15d0cfa9e138&animated=true&width=1785&height=1344)
@@ -79,6 +81,47 @@ sudo ./it8951 --cross 9
 sudo ./it8951 --checker 50
 sudo ./it8951 --quarter
 ```
+
+## Regional Differential Updates
+
+The driver can compare a new image against the last displayed image and only
+refresh the changed region — dramatically reducing flash/flicker and update time
+for small changes (e.g. time-line movement on a calendar).
+
+### Usage
+
+```bash
+# Soft refresh — no white flash, just GC16 on changed region
+sudo ./it8951 --image calendar.png --soft
+
+# Hard refresh — white-flash the region first, then draw (cleanest result)
+sudo ./it8951 --image calendar.png --hard
+
+# Custom border (dithering zone around changed region)
+sudo ./it8951 --image calendar.png --soft --border-smooth 30
+```
+
+### How it works
+
+1. **Store last image** — After each render, the current image is saved to
+   `/tmp/it8951_last.png` (8bpp grayscale PNG).
+2. **Compare** — New image is compared pixel-by-pixel against the stored image.
+   Pixels differing by more than a threshold (default: 5) mark the changed region.
+3. **Expand** — The changed bounding box is expanded by `--border-smooth` pixels
+   (default: 20) on each side, clamped to screen bounds.
+4. **Dither edges** — Floyd-Steinberg dithering blends old and new pixel values
+   in the border zone, creating a smooth transition with no hard edge artifacts.
+5. **Send region** — Only the expanded region is loaded via SPI and refreshed:
+   - `--soft`: Single GC16 pass (no blinking, may leave faint ghosting)
+   - `--hard`: White-flash region (GC16 clear) then GC16 draw (cleanest, brief blink)
+
+### When to use
+
+| Mode | Best for | Blinking | Ghosting |
+|------|----------|----------|----------|
+| `--soft` | Small changes (time line, single event) | None | Possible on dark→light |
+| `--hard` | Large changes, ghosting-prone content | Brief white flash | None |
+| (none) | First render, full screen change | Full flash | None |
 
 ## OS Setup
 
