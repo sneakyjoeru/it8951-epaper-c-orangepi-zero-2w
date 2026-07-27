@@ -21,7 +21,7 @@
  */
 #include "it8951_driver.h"
 
-#define STB_IMAGE_IMPLEMENTATION
+/* stb_image is already implemented in it8951_image.c — just include headers */
 #include "stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
