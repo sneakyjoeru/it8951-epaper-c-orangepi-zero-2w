@@ -52,10 +52,10 @@ static void apply_border_dither(uint8_t *region_data,
                                 int screen_w, int screen_h,
                                 int border)
 {
-    /* Allocate error buffer */
-    float *errors = calloc(rw * rh, sizeof(float));
-    if (!errors) return;
-
+    /* Copy pixel values from the new image for the entire region.
+       The border zone blends old→new for smooth transition.
+       No explicit dithering — let the GC16 hardware handle 16-level quantization
+       to preserve 8bpp antialiasing. */
     for (int y = 0; y < rh; y++) {
         for (int x = 0; x < rw; x++) {
             int gx = rx + x;
@@ -74,33 +74,18 @@ static void apply_border_dither(uint8_t *region_data,
             int dist = (dx < dy) ? dx : dy;
 
             if (dist >= border) {
-                /* Inner region: use new value directly */
+                /* Inner region: use new value directly (full 8bpp) */
                 region_data[y * rw + x] = (uint8_t)new_val;
             } else {
-                /* Border zone: blend old→new based on distance */
+                /* Border zone: linear blend old→new based on distance */
                 float blend = (float)dist / (float)border;
-                float target = old_val * (1.0f - blend) + new_val * blend;
-                /* Add accumulated error */
-                target += errors[y * rw + x];
-                /* Quantize to 16 levels (0-15 mapped to 0-240) */
-                int q = (int)(target / 16.0f + 0.5f);
-                if (q < 0) q = 0;
-                if (q > 15) q = 15;
-                uint8_t quantized = (uint8_t)(q * 17); /* 0,17,34,...,255 */
-                region_data[y * rw + x] = quantized;
-                /* Propagate error (Floyd-Steinberg) */
-                float err = target - (float)quantized;
-                if (x + 1 < rw) errors[y * rw + (x + 1)] += err * 7.0f / 16.0f;
-                if (y + 1 < rh) {
-                    if (x > 0)      errors[(y + 1) * rw + (x - 1)] += err * 3.0f / 16.0f;
-                                    errors[(y + 1) * rw + x]       += err * 5.0f / 16.0f;
-                    if (x + 1 < rw) errors[(y + 1) * rw + (x + 1)] += err * 1.0f / 16.0f;
-                }
+                int val = (int)(old_val * (1.0f - blend) + new_val * blend + 0.5f);
+                if (val < 0) val = 0;
+                if (val > 255) val = 255;
+                region_data[y * rw + x] = (uint8_t)val;
             }
         }
     }
-
-    free(errors);
 }
 
 /* ---- Find bounding box of changed region ---- */
