@@ -194,7 +194,14 @@ int it8951_display_diff(it8951_t *dev, const uint8_t *new_data,
     if (rx + rw > screen_w) rw = screen_w - rx;
     if (ry + rh > screen_h) rh = screen_h - ry;
 
-    printf("diff: changed region %d,%d %dx%d → expanded %d,%d %dx%d (border=%d)\n",
+    /* IT8951 8bpp requires even-width regions (data sent as 16-bit words).
+       Align x to even and round width up to even. */
+    if (rx % 2 != 0) { rx--; rw++; }
+    if (rw % 2 != 0) { rw++; }
+    if (rx + rw > screen_w) rw = screen_w - rx;  /* re-clamp */
+    if (rw % 2 != 0) rw--;  /* must stay even */
+
+    printf("diff: changed region %d,%d %dx%d → expanded %d,%d %dx%d (border=%d, even-aligned)\n",
            cx, cy, cw, ch, rx, ry, rw, rh, border);
 
     /* Build region data with border dithering */
