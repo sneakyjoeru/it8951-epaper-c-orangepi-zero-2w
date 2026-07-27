@@ -5,7 +5,7 @@ TARGET = it8951
 SRC_DIR = src
 INC_DIR = include
 
-SRCS = $(SRC_DIR)/it8951_driver.c $(SRC_DIR)/it8951_text.c $(SRC_DIR)/it8951_image.c $(SRC_DIR)/main.c
+SRCS = $(SRC_DIR)/it8951_driver.c $(SRC_DIR)/it8951_text.c $(SRC_DIR)/it8951_image.c $(SRC_DIR)/it8951_diff.c $(SRC_DIR)/main.c
 
 CC = gcc
 CFLAGS = -Wall -O2 -I$(INC_DIR) -I/usr/include/freetype2

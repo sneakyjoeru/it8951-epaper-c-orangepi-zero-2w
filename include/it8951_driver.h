@@ -118,4 +118,24 @@ void it8951_set_vcom(it8951_t *dev, uint16_t vcom);
 /* Sleep */
 void it8951_sleep(it8951_t *dev);
 
+/* ---- Regional differential update (it8951_diff.c) ---- */
+
+/* Refresh modes for diff update */
+#define DIFF_MODE_SOFT 0   /* GC16 only, no blinking */
+#define DIFF_MODE_HARD 1   /* White-flash region then GC16 */
+
+/* Display with differential regional update.
+   Compares new_data against last displayed image (stored at /tmp/it8951_last.png).
+   Only sends changed region + border to display.
+   mode: DIFF_MODE_SOFT or DIFF_MODE_HARD
+   border: pixels to expand changed region (for dithering, default 20)
+   threshold: pixel difference to detect change (default 5) */
+int it8951_display_diff(it8951_t *dev, const uint8_t *new_data,
+                        int w, int h, int mode, int border, int threshold);
+
+/* Convenience: load image file, scale, apply brightness, diff update. */
+int it8951_display_image_diff(it8951_t *dev, const char *path,
+                              uint8_t bg_color, float brightness,
+                              int mode, int border);
+
 #endif /* IT8951_DRIVER_H */

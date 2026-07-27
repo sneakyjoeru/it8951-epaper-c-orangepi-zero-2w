@@ -327,6 +327,14 @@ static void usage(const char *prog)
     printf("  --server              Start HTTP API server (port 8888)\n");
     printf("  --port N              Server port (default: 8888)\n");
     printf("  --set-vcom N          Set VCOM (millivolts, e.g. 2510 = -2.51V)\n");
+    printf("  --hard                Regional hard refresh (white flash + GC16)\n");
+    printf("  --soft                Regional soft refresh (GC16 only, no blink)\n");
+    printf("  --border-smooth N     Border expansion for dithering (default: 20)\n");
+    printf("\n");
+    printf("Regional update modes (--hard/--soft) compare the new image against\n");
+    printf("the last displayed image, find changed regions, expand by border-smooth\n");
+    printf("pixels, apply Floyd-Steinberg dithering at edges, and send only the\n");
+    printf("changed region to the display. Use with --image.\n");
     printf("\n");
 }
 
@@ -342,6 +350,8 @@ int main(int argc, char *argv[])
     int font_size = 48, port = 8888;
     int set_vcom = -1;
     float brightness = 1.4;
+    int diff_mode = -1;  /* -1 = none, 0 = soft, 1 = hard */
+    int border_smooth = 20;
     const char *text = NULL, *font_path = NULL, *image_path = NULL;
 
     static struct option long_opts[] = {
@@ -362,11 +372,14 @@ int main(int argc, char *argv[])
         {"server",         no_argument,       0, 'S'},
         {"port",           required_argument, 0, 'p'},
         {"set-vcom",       required_argument, 0, 'v'},
+        {"hard",           no_argument,       0, 'H'},
+        {"soft",           no_argument,       0, 'O'},
+        {"border-smooth",  required_argument, 0, 'B'},
         {"help",           no_argument,       0, 'h'},
         {0, 0, 0, 0}
     };
 
-    while ((opt = getopt_long(argc, argv, "ict:f:F:m:b:gk::x::XVqssSp:v:h",
+    while ((opt = getopt_long(argc, argv, "ict:f:F:m:b:gk::x::XVqsSp:v:HO B:h",
                               long_opts, NULL)) != -1) {
         switch (opt) {
             case 'i': do_info = 1; break;
@@ -386,6 +399,9 @@ int main(int argc, char *argv[])
             case 'S': do_server = 1; break;
             case 'p': port = atoi(optarg); break;
             case 'v': set_vcom = atoi(optarg); break;
+            case 'H': diff_mode = DIFF_MODE_HARD; break;
+            case 'O': diff_mode = DIFF_MODE_SOFT; break;
+            case 'B': border_smooth = atoi(optarg); break;
             case 'h': usage(argv[0]); return 0;
             default: usage(argv[0]); return 1;
         }
@@ -433,7 +449,15 @@ int main(int argc, char *argv[])
 
     if (image_path) {
         printf("Loading image: %s\n", image_path);
-        it8951_display_image(&dev, image_path, 0, brightness, GC16_MODE);
+        if (diff_mode >= 0) {
+            printf("Regional %s refresh (border-smooth=%d)\n",
+                   diff_mode == DIFF_MODE_HARD ? "hard" : "soft",
+                   border_smooth);
+            it8951_display_image_diff(&dev, image_path, 0, brightness,
+                                      diff_mode, border_smooth);
+        } else {
+            it8951_display_image(&dev, image_path, 0, brightness, GC16_MODE);
+        }
         printf("Displayed.\n");
     }
 
