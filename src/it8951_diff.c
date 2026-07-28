@@ -226,25 +226,21 @@ int it8951_display_diff(it8951_t *dev, const uint8_t *new_data,
 
     /* Send to display */
     if (mode == DIFF_MODE_HARD) {
-        /* Hard refresh: white-flash region first, then draw */
-        printf("diff: hard refresh (white flash + GC16)\n");
+        /* Hard refresh: white-flash region first, then draw (GL16) */
+        printf("diff: hard refresh (white flash + GL16, minimal area)\n");
         uint8_t *white = malloc(rw * rh);
         memset(white, 255, rw * rh);
         it8951_display_8bpp(dev, white, rx, ry, rw, rh, GL16_MODE);
         free(white);
         it8951_display_8bpp(dev, region, rx, ry, rw, rh, GL16_MODE);
-    } else if (mode == DIFF_MODE_SMOOTH) {
-        /* Smooth refresh: A2 fast mode, 1-bit, no flash */
-        printf("diff: smooth refresh (A2, 1-bit)\n");
+    } else {
+        /* Soft/smooth refresh: A2 mode, 1-bit, NO blink, NO flash */
+        printf("diff: soft refresh (A2, no blink)\n");
         uint8_t *bw = malloc(rw * rh);
         for (int i = 0; i < rw * rh; i++)
             bw[i] = (region[i] < 128) ? 0 : 255;
         it8951_display_8bpp(dev, bw, rx, ry, rw, rh, A2_MODE);
         free(bw);
-    } else {
-        /* Soft refresh: plain 8bpp GC16, no software dithering */
-        printf("diff: soft refresh (GC16, 8bpp)\n");
-        it8951_display_8bpp(dev, region, rx, ry, rw, rh, GL16_MODE);
     }
 
     /* Save current image as last */
