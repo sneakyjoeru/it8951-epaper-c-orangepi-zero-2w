@@ -52,9 +52,25 @@ static void apply_border_dither(uint8_t *region_data,
                                 int screen_w, int screen_h,
                                 int border)
 {
-    /* Copy new pixel values for the entire region — no blending.
-       The border expansion ensures antialiased edges are included,
-       but we send the actual new pixels to avoid halos. */
+    /* Inner region: copy new pixel values directly (sharp text).
+       Border zone: Floyd-Steinberg dither the new values to 16 levels
+       to smooth the transition between updated and untouched screen. */
+    float *errors = calloc(rw * rh, sizeof(float));
+    if (!errors) {
+        /* Fallback: just copy new values */
+        for (int y = 0; y < rh; y++) {
+            for (int x = 0; x < rw; x++) {
+                int gx = rx + x, gy = ry + y;
+                if (gx < 0 || gx >= screen_w || gy < 0 || gy >= screen_h) {
+                    region_data[y * rw + x] = 255;
+                    continue;
+                }
+                region_data[y * rw + x] = new_full[gy * screen_w + gx];
+            }
+        }
+        return;
+    }
+
     for (int y = 0; y < rh; y++) {
         for (int x = 0; x < rw; x++) {
             int gx = rx + x;
@@ -63,9 +79,37 @@ static void apply_border_dither(uint8_t *region_data,
                 region_data[y * rw + x] = 255;
                 continue;
             }
-            region_data[y * rw + x] = new_full[gy * screen_w + gx];
+
+            int new_val = new_full[gy * screen_w + gx];
+
+            /* Distance from region edge */
+            int dx = (x < rw - 1 - x) ? x : (rw - 1 - x);
+            int dy = (y < rh - 1 - y) ? y : (rh - 1 - y);
+            int dist = (dx < dy) ? dx : dy;
+
+            if (dist >= border) {
+                /* Inner region: raw new value, no dithering */
+                region_data[y * rw + x] = (uint8_t)new_val;
+            } else {
+                /* Border zone: Floyd-Steinberg dither to 16 levels */
+                int idx = y * rw + x;
+                float val = (float)new_val + errors[idx];
+                int q = (int)(val / 17.0f + 0.5f);
+                if (q < 0) q = 0;
+                if (q > 15) q = 15;
+                uint8_t quantized = (uint8_t)(q * 17);
+                region_data[idx] = quantized;
+                float err = val - (float)quantized;
+                if (x + 1 < rw) errors[idx + 1] += err * 7.0f / 16.0f;
+                if (y + 1 < rh) {
+                    if (x > 0)      errors[idx + rw - 1] += err * 3.0f / 16.0f;
+                                    errors[idx + rw]     += err * 5.0f / 16.0f;
+                    if (x + 1 < rw) errors[idx + rw + 1] += err * 1.0f / 16.0f;
+                }
+            }
         }
     }
+    free(errors);
 }
 
 /* ---- Find bounding box of changed region ---- */
