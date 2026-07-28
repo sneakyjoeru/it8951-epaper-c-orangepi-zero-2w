@@ -119,20 +119,28 @@ static int find_changed_region(const uint8_t *old_img, const uint8_t *new_img,
                                int *out_x, int *out_y, int *out_w, int *out_h)
 {
     int min_x = w, min_y = h, max_x = -1, max_y = -1;
+    int diff_count = 0;
 
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
-            if (abs((int)old_img[y * w + x] - (int)new_img[y * w + x]) > threshold) {
+            int diff = abs((int)old_img[y * w + x] - (int)new_img[y * w + x]);
+            if (diff > threshold) {
                 if (x < min_x) min_x = x;
                 if (x > max_x) max_x = x;
                 if (y < min_y) min_y = y;
                 if (y > max_y) max_y = y;
+                diff_count++;
             }
         }
     }
 
-    if (max_x < 0)
+    if (max_x < 0) {
+        printf("diff: no changes detected (threshold=%d)\n", threshold);
         return -1; /* No changes */
+    }
+
+    printf("diff: %d pixels differ (threshold=%d), region %d,%d %dx%d\n",
+           diff_count, threshold, min_x, min_y, max_x - min_x + 1, max_y - min_y + 1);
 
     *out_x = min_x;
     *out_y = min_y;
