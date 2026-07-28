@@ -338,9 +338,12 @@ int it8951_display_image_diff(it8951_t *dev, const char *path,
         }
     }
 
-    /* Differential update — plain 8bpp, no software dithering */
+    /* Differential update — threshold 50 skips small color changes (dim_past
+       fill difference is ~16) but catches time-line movement (255) and
+       outline changes (200). This keeps the diff region small for smooth
+       minute updates even when the last full refresh had dim_past enabled. */
     int ret = it8951_display_diff(dev, canvas, screen_w, screen_h,
-                                  mode, border, 5);
+                                  mode, border, 50);
 
     free(canvas);
     free(resized);
