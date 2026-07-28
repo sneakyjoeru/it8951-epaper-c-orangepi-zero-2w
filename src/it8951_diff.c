@@ -52,38 +52,18 @@ static void apply_border_dither(uint8_t *region_data,
                                 int screen_w, int screen_h,
                                 int border)
 {
-    /* Copy pixel values from the new image for the entire region.
-       The border zone blends old→new for smooth transition.
-       No explicit dithering — let the GC16 hardware handle 16-level quantization
-       to preserve 8bpp antialiasing. */
+    /* Copy new pixel values for the entire region — no blending.
+       The border expansion ensures antialiased edges are included,
+       but we send the actual new pixels to avoid halos. */
     for (int y = 0; y < rh; y++) {
         for (int x = 0; x < rw; x++) {
             int gx = rx + x;
             int gy = ry + y;
             if (gx < 0 || gx >= screen_w || gy < 0 || gy >= screen_h) {
-                region_data[y * rw + x] = 255; /* white for out-of-bounds */
+                region_data[y * rw + x] = 255;
                 continue;
             }
-
-            int old_val = old_full[gy * screen_w + gx];
-            int new_val = new_full[gy * screen_w + gx];
-
-            /* Distance from region edge */
-            int dx = (x < rw - 1 - x) ? x : (rw - 1 - x);
-            int dy = (y < rh - 1 - y) ? y : (rh - 1 - y);
-            int dist = (dx < dy) ? dx : dy;
-
-            if (dist >= border) {
-                /* Inner region: use new value directly (full 8bpp) */
-                region_data[y * rw + x] = (uint8_t)new_val;
-            } else {
-                /* Border zone: linear blend old→new based on distance */
-                float blend = (float)dist / (float)border;
-                int val = (int)(old_val * (1.0f - blend) + new_val * blend + 0.5f);
-                if (val < 0) val = 0;
-                if (val > 255) val = 255;
-                region_data[y * rw + x] = (uint8_t)val;
-            }
+            region_data[y * rw + x] = new_full[gy * screen_w + gx];
         }
     }
 }
