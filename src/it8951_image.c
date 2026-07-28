@@ -110,7 +110,8 @@ int it8951_display_image(it8951_t *dev, const char *path,
     }
 
     /* Display as 8bpp — hardware handles grayscale internally */
-    it8951_display_8bpp(dev, canvas, 0, 0, screen_w, screen_h, GL16_MODE);
+    /* Full screen: use GC16 for complete clear cycle (INIT not needed). */
+    it8951_display_8bpp(dev, canvas, 0, 0, screen_w, screen_h, GC16_MODE);
 
     free(canvas);
     free(resized);
