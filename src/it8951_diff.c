@@ -6,16 +6,26 @@
  * Floyd-Steinberg dithering at the edges for smooth transitions, and
  * sends only the changed region to the display.
  *
- * Two refresh modes:
- *   --hard   White-flash the region first (GC16), then draw new content.
- *            Produces cleanest result but visible white blink.
- *   --soft   Draw new content directly over old (GC16 only, no pre-clear).
- *            No blinking, but may leave faint ghosting in areas where
- *            old content was dark and new content is light.
+ * Three refresh modes:
+ *   --soft   Draw new content directly over old (GL16, no pre-clear, no blink).
+ *            Grayscale 16-level dithering is visible in the border zone.
+ *            Best for event changes and smooth time-line updates.
+ *   --hard   White-flash the inner changed region first (GL16), then draw
+ *            the full expanded region (inner + dithered border) with GL16.
+ *            The flash is confined to the changed area; the border gets a
+ *            clean GL16 draw with the dithered gradient — no flash in the
+ *            border zone, so dithering is visible.
+ *   --smooth A2 fast mode (1-bit, no flash). Fastest, but dithering is not
+ *            visible (A2 only supports black/white). Use for speed-critical
+ *            updates where dithering quality doesn't matter.
  *
  * --border-smooth N   Expand changed region by N pixels on each side (default: 20).
- *                      Dithering is applied in this border zone to blend
- *                      old and new pixel values smoothly.
+ *                      The border zone blends from old pixels (outer edge) to
+ *                      new pixels (inner edge) using Floyd-Steinberg dithering
+ *                      to 16 gray levels. Near the refresh region the dithering
+ *                      noise is maximal (mostly new content); at the outer edge
+ *                      it reduces to just a few scattered dots of new content
+ *                      mixed into the old background.
  *
  * Image storage: /tmp/it8951_last.png (PNG, 8bpp grayscale).
  */
@@ -42,8 +52,11 @@
  * error diffusion. Pixels in the inner region get the new value directly;
  * pixels in the border zone get a dithered blend of old and new.
  *
- * blend_factor: 0.0 = all old, 1.0 = all new. Varies from 0 at the outer
- * edge to 1 at the inner edge of the border zone.
+ * blend_factor: 0.0 = all old, 1.0 = all new. Varies linearly from 0 at the
+ * outer edge (dist=0, just a few dots of new) to 1 at the inner edge
+ * (dist=border, fully new content). Floyd-Steinberg dithering to 16 levels
+ * creates the predictable noise pattern: maximal near the refresh region,
+ * fading to sparse dots at the outer edge.
  */
 static void apply_border_dither(uint8_t *region_data,
                                 const uint8_t *old_full,
@@ -53,8 +66,7 @@ static void apply_border_dither(uint8_t *region_data,
                                 int border)
 {
     /* Inner region: copy new pixel values directly (sharp text).
-       Border zone: Floyd-Steinberg dither the new values to 16 levels
-       to smooth the transition between updated and untouched screen. */
+       Border zone: blend old→new with Floyd-Steinberg dither to 16 levels. */
     float *errors = calloc(rw * rh, sizeof(float));
     if (!errors) {
         /* Fallback: just copy new values */
@@ -81,8 +93,9 @@ static void apply_border_dither(uint8_t *region_data,
             }
 
             int new_val = new_full[gy * screen_w + gx];
+            int old_val = old_full[gy * screen_w + gx];
 
-            /* Distance from region edge */
+            /* Distance from region edge (0 = outer edge, increases inward) */
             int dx = (x < rw - 1 - x) ? x : (rw - 1 - x);
             int dy = (y < rh - 1 - y) ? y : (rh - 1 - y);
             int dist = (dx < dy) ? dx : dy;
@@ -91,9 +104,18 @@ static void apply_border_dither(uint8_t *region_data,
                 /* Inner region: raw new value, no dithering */
                 region_data[y * rw + x] = (uint8_t)new_val;
             } else {
-                /* Border zone: Floyd-Steinberg dither to 16 levels */
+                /* Border zone: blend old→new with Floyd-Steinberg dither.
+                   blend = dist/border: 0 at outer edge (all old, few dots),
+                   1 at inner edge (all new). The dithering noise is maximal
+                   near the inner edge (where new content dominates) and
+                   fades to sparse dots at the outer edge. */
+                float blend = (border > 0) ? (float)dist / (float)border : 1.0f;
+                float target = (float)old_val * (1.0f - blend) +
+                               (float)new_val * blend;
+
+                /* Floyd-Steinberg dither to 16 levels (0-15, step 17) */
                 int idx = y * rw + x;
-                float val = (float)new_val + errors[idx];
+                float val = target + errors[idx];
                 int q = (int)(val / 17.0f + 0.5f);
                 if (q < 0) q = 0;
                 if (q > 15) q = 15;
@@ -159,7 +181,8 @@ static int find_changed_region(const uint8_t *old_img, const uint8_t *new_img,
  *   dev         — IT8951 device handle
  *   new_data    — New full-screen 8bpp grayscale image (w*h bytes)
  *   w, h        — Image dimensions (should match panel size)
- *   mode        — Hard or soft refresh
+ *   mode        — DIFF_MODE_SOFT (GL16, no flash), DIFF_MODE_HARD (flash inner +
+ *                GL16), DIFF_MODE_SMOOTH (A2 1-bit, no flash)
  *   border      — Border expansion in pixels (for dithering)
  *   threshold   — Pixel difference threshold to detect changes
  *
@@ -221,7 +244,7 @@ int it8951_display_diff(it8951_t *dev, const uint8_t *new_data,
     printf("diff: changed region %d,%d %dx%d → expanded %d,%d %dx%d (border=%d, even-aligned)\n",
            cx, cy, cw, ch, rx, ry, rw, rh, border);
 
-    /* Build region data with border dithering */
+    /* Build region data with border dithering (blend old→new) */
     uint8_t *region = malloc(rw * rh);
     if (!region) {
         stbi_image_free(old_data);
@@ -232,23 +255,50 @@ int it8951_display_diff(it8951_t *dev, const uint8_t *new_data,
                         rx, ry, rw, rh,
                         screen_w, screen_h, border);
 
-    /* Send to display */
+    /* Send to display — mode-specific */
     if (mode == DIFF_MODE_HARD) {
-        /* Hard refresh: white-flash region first, then draw (GL16) */
-        printf("diff: hard refresh (white flash + GL16, minimal area)\n");
-        uint8_t *white = malloc(rw * rh);
-        memset(white, 255, rw * rh);
-        it8951_display_8bpp(dev, white, rx, ry, rw, rh, GL16_MODE);
+        /* Hard refresh: white-flash the INNER changed region only (no border),
+           then draw the full expanded region (inner + dithered border) with
+           GL16. The flash is confined to the changed area; the border gets a
+           clean GL16 draw so the dithered gradient is visible. */
+        printf("diff: hard refresh (flash inner %d,%d %dx%d + GL16 border dither)\n",
+               cx, cy, cw, ch);
+
+        /* Clamp inner region to the expanded region bounds */
+        int inner_x = cx, inner_y = cy, inner_w = cw, inner_h = ch;
+        if (inner_x < rx) { inner_w += (inner_x - rx); inner_x = rx; }
+        if (inner_y < ry) { inner_h += (inner_y - ry); inner_y = ry; }
+        if (inner_x + inner_w > rx + rw) inner_w = rx + rw - inner_x;
+        if (inner_y + inner_h > ry + rh) inner_h = ry + rh - inner_y;
+        /* Even-align inner region */
+        if (inner_x % 2 != 0) { inner_x--; inner_w++; }
+        if (inner_w % 2 != 0) inner_w++;
+        if (inner_x + inner_w > rx + rw) inner_w = (rx + rw - inner_x);
+        if (inner_w % 2 != 0) inner_w--;
+        if (inner_w < 2) inner_w = 2;
+
+        /* White-flash inner changed region */
+        uint8_t *white = malloc(inner_w * inner_h);
+        memset(white, 255, inner_w * inner_h);
+        it8951_display_8bpp(dev, white, inner_x, inner_y, inner_w, inner_h, GL16_MODE);
         free(white);
+
+        /* Draw full expanded region (inner + dithered border) with GL16 */
         it8951_display_8bpp(dev, region, rx, ry, rw, rh, GL16_MODE);
-    } else {
-        /* Soft/smooth refresh: A2 mode, 1-bit, NO blink, NO flash */
-        printf("diff: soft refresh (A2, no blink)\n");
+    } else if (mode == DIFF_MODE_SMOOTH) {
+        /* Smooth refresh: A2 mode, 1-bit, NO blink, NO flash — fastest.
+           Dithering is NOT visible (A2 only supports black/white). */
+        printf("diff: smooth refresh (A2, no blink, 1-bit)\n");
         uint8_t *bw = malloc(rw * rh);
         for (int i = 0; i < rw * rh; i++)
             bw[i] = (region[i] < 128) ? 0 : 255;
         it8951_display_8bpp(dev, bw, rx, ry, rw, rh, A2_MODE);
         free(bw);
+    } else {
+        /* Soft refresh: GL16 mode, 16-level grayscale, NO blink, NO flash.
+           The dithered border gradient is fully visible. */
+        printf("diff: soft refresh (GL16, no blink, 16-level dither)\n");
+        it8951_display_8bpp(dev, region, rx, ry, rw, rh, GL16_MODE);
     }
 
     /* Save current image as last */
