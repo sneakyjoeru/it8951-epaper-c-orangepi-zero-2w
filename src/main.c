@@ -303,7 +303,118 @@ static int do_setup()
     return 0;
 }
 
-/* ---- Usage ---- */
+/* ---- Edge test: black squares at each corner with dotted borders ---- */
+static int do_edge_test(it8951_t *dev)
+{
+    int w = dev->info.panel_w;
+    int h = dev->info.panel_h;
+    int sq = 50;       /* square size */
+    int dot = 2;       /* dot size for dotted border */
+
+    /* Full-screen white background (0 = white on screen) */
+    uint8_t *canvas = malloc(w * h);
+    memset(canvas, 0, w * h);
+
+    /* Draw 50x50 black squares (255 = black on screen) at all 4 corners */
+    int positions[4][2] = {
+        {0, 0},           /* top-left */
+        {w - sq, 0},      /* top-right */
+        {0, h - sq},      /* bottom-left */
+        {w - sq, h - sq}, /* bottom-right */
+    };
+    for (int i = 0; i < 4; i++) {
+        int sx = positions[i][0];
+        int sy = positions[i][1];
+        for (int y = 0; y < sq; y++)
+            for (int x = 0; x < sq; x++)
+                canvas[(sy + y) * w + (sx + x)] = 255;
+    }
+
+    /* Draw dotted borders (2px black dots, 4px gaps) around each square */
+    for (int i = 0; i < 4; i++) {
+        int sx = positions[i][0];
+        int sy = positions[i][1];
+        /* Top edge */
+        for (int dx = -dot; dx < sq + dot; dx += dot * 3) {
+            int px = sx + dx;
+            if (px < 0 || px >= w) continue;
+            for (int dy = 0; dy < dot; dy++) {
+                int py = sy - dot - 1 + dy;
+                if (py >= 0 && py < h) canvas[py * w + px] = 255;
+            }
+        }
+        /* Bottom edge */
+        for (int dx = -dot; dx < sq + dot; dx += dot * 3) {
+            int px = sx + dx;
+            if (px < 0 || px >= w) continue;
+            for (int dy = 0; dy < dot; dy++) {
+                int py = sy + sq + dy;
+                if (py >= 0 && py < h) canvas[py * w + px] = 255;
+            }
+        }
+        /* Left edge */
+        for (int dy = -dot; dy < sq + dot; dy += dot * 3) {
+            int py = sy + dy;
+            if (py < 0 || py >= h) continue;
+            for (int dx2 = 0; dx2 < dot; dx2++) {
+                int px = sx - dot - 1 + dx2;
+                if (px >= 0 && px < w) canvas[py * w + px] = 255;
+            }
+        }
+        /* Right edge */
+        for (int dy = -dot; dy < sq + dot; dy += dot * 3) {
+            int py = sy + dy;
+            if (py < 0 || py >= h) continue;
+            for (int dx2 = 0; dx2 < dot; dx2++) {
+                int px = sx + sq + dx2;
+                if (px >= 0 && px < w) canvas[py * w + px] = 255;
+            }
+        }
+    }
+
+    printf("Displaying edge test (4x 50px black squares with dotted borders)...\n");
+    it8951_display_8bpp(dev, canvas, 0, 0, w, h, GC16_MODE);
+    printf("Done.\n");
+
+    free(canvas);
+    return 0;
+}
+
+/* ---- Grid test: 1px lines with labels, 50px spacing ---- */
+static int do_grid_test(it8951_t *dev)
+{
+    int w = dev->info.panel_w;   /* 1872 */
+    int h = dev->info.panel_h;   /* 1404 */
+    int spacing = 50;
+
+    /* Full-screen white background (255 = white on screen) */
+    uint8_t *canvas = malloc(w * h);
+    memset(canvas, 255, w * h);  /* all 255 = white */
+
+    /* Draw vertical 1px black lines every 50px (x=50, 100, 150, ...) */
+    int vcount = 0;
+    for (int x = spacing; x < w; x += spacing) {
+        for (int y = 0; y < h; y++)
+            canvas[y * w + x] = 0;  /* 0 = black */
+        vcount++;
+    }
+
+    /* Draw horizontal 1px black lines every 50px (y=50, 100, 150, ...) */
+    int hcount = 0;
+    for (int y = spacing; y < h; y += spacing) {
+        for (int x = 0; x < w; x++)
+            canvas[y * w + x] = 0;
+        hcount++;
+    }
+
+    printf("Displaying grid test (%d vertical, %d horizontal lines, %dpx spacing)...\n",
+           vcount, hcount, spacing);
+    it8951_display_8bpp(dev, canvas, 0, 0, w, h, GC16_MODE);
+    printf("Done.\n");
+
+    free(canvas);
+    return 0;
+}
 
 static void usage(const char *prog)
 {
@@ -323,20 +434,24 @@ static void usage(const char *prog)
     printf("  --cross-invert        Invert cross colors (black bg)\n");
     printf("  --cross-vertical      Cross gradient: bottom-to-top\n");
     printf("  --quarter             Top-left quarter black\n");
+    printf("  --edge-test           4x 50px black squares at corners with dotted borders\n");
+    printf("  --grid-test           1px grid lines every 50px (vertical+horizontal)\n");
     printf("  --setup               Configure OS (overlay + packages)\n");
     printf("  --server              Start HTTP API server (port 8888)\n");
     printf("  --port N              Server port (default: 8888)\n");
     printf("  --set-vcom N          Set VCOM (millivolts, e.g. 2510 = -2.51V)\n");
     printf("  --hard                Regional hard refresh (white flash inner + GL16)\n");
     printf("  --soft                Regional soft refresh (GL16 only, no blink)\n");
+    printf("  --du                  Regional DU refresh (1-bit, no flash, no ghosting)\n");
     printf("  --fullscreen          Full-screen GC16 clean refresh (removes ghosting)\n");
     printf("  --border-smooth N     Border expansion in px for partial refresh (default: 20)\n");
     printf("\n");
-    printf("Regional update modes (--hard/--soft) compare the new image against\n");
+    printf("Regional update modes (--hard/--soft/--du) compare the new image against\n");
     printf("the last displayed image, find changed regions, expand by border-smooth\n");
     printf("pixels, keep the old content in the border zone (no dithering), and send\n");
-    printf("only the changed region to the display. --fullscreen does a full GC16\n");
-    printf("clean refresh. Use with --image.\n");
+    printf("only the changed region to the display. --du thresholds to 1-bit and uses\n");
+    printf("DU mode (no ghosting accumulation). --fullscreen does a full GC16 clean.\n");
+    printf("Use with --image.\n");
     printf("\n");
 }
 
@@ -346,7 +461,7 @@ int main(int argc, char *argv[])
 {
     int opt;
     int do_info = 0, do_clear = 0, want_gradient = 0, do_quarter_flag = 0;
-    int do_setup_flag = 0, do_server = 0;
+    int do_setup_flag = 0, do_server = 0, do_edge_test_flag = 0, do_grid_test_flag = 0;
     int checker = 0, cross = 0;
     int cross_invert = 0, cross_vertical = 0;
     int font_size = 48, port = 8888;
@@ -354,6 +469,8 @@ int main(int argc, char *argv[])
     float brightness = 1.4;
     int diff_mode = -1;  /* -1 = none, 0 = soft, 1 = hard */
     int border_smooth = 20;
+    int use_4bpp = 0;
+    int du_fullscreen = 0;
     const char *text = NULL, *font_path = NULL, *image_path = NULL;
 
     static struct option long_opts[] = {
@@ -369,20 +486,22 @@ int main(int argc, char *argv[])
         {"cross",          optional_argument, 0, 'x'},
         {"cross-invert",   no_argument,       0, 'X'},
         {"cross-vertical", no_argument,       0, 'V'},
-        {"quarter",        no_argument,       0, 'q'},
-        {"setup",          no_argument,       0, 's'},
+        {"quarter",        no_argument,       0, 'q'},        {"edge-test",        no_argument,       0, 'e'},
+        {"grid-test",        no_argument,       0, 'G'},        {"setup",          no_argument,       0, 's'},
         {"server",         no_argument,       0, 'S'},
         {"port",           required_argument, 0, 'p'},
         {"set-vcom",       required_argument, 0, 'v'},
         {"hard",           no_argument,       0, 'H'},
         {"soft",           no_argument,       0, 'O'},
+        {"du",             no_argument,       0, 'D'},
         {"fullscreen",     no_argument,       0, 'A'},
         {"border-smooth",  required_argument, 0, 'B'},
-        {"help",           no_argument,       0, 'h'},
+        {"4bpp",            no_argument,       0, '4'},
+        {"du-fullscreen",   no_argument,       0, 'U'},
         {0, 0, 0, 0}
     };
 
-    while ((opt = getopt_long(argc, argv, "ict:f:F:m:b:gk::x::XVqsSp:v:HO B:h",
+    while ((opt = getopt_long(argc, argv, "ict:f:F:m:b:gk::x::XVqGeSp:v:HODAB:h4U",
                               long_opts, NULL)) != -1) {
         switch (opt) {
             case 'i': do_info = 1; break;
@@ -398,14 +517,19 @@ int main(int argc, char *argv[])
             case 'X': cross_invert = 1; break;
             case 'V': cross_vertical = 1; break;
             case 'q': do_quarter_flag = 1; break;
+            case 'e': do_edge_test_flag = 1; break;
+            case 'G': do_grid_test_flag = 1; break;
             case 's': do_setup_flag = 1; break;
             case 'S': do_server = 1; break;
             case 'p': port = atoi(optarg); break;
             case 'v': set_vcom = atoi(optarg); break;
             case 'H': diff_mode = DIFF_MODE_HARD; break;
             case 'O': diff_mode = DIFF_MODE_SOFT; break;
+            case 'D': diff_mode = DIFF_MODE_DU; break;
             case 'A': diff_mode = DIFF_MODE_FULLSCREEN; break;
             case 'B': border_smooth = atoi(optarg); break;
+            case '4': use_4bpp = 1; break;
+            case 'U': du_fullscreen = 1; break;
             case 'h': usage(argv[0]); return 0;
             default: usage(argv[0]); return 1;
         }
@@ -424,7 +548,8 @@ int main(int argc, char *argv[])
     }
 
     int has_action = do_clear || text || image_path || want_gradient ||
-                     checker || cross || do_quarter_flag || do_server;
+                     checker || cross || do_quarter_flag || do_edge_test_flag ||
+                     do_grid_test_flag || do_server;
 
     if (do_info || !has_action) {
         uint16_t vcom = it8951_get_vcom(&dev);
@@ -453,10 +578,17 @@ int main(int argc, char *argv[])
 
     if (image_path) {
         printf("Loading image: %s\n", image_path);
-        if (diff_mode >= 0) {
+        if (du_fullscreen) {
+            printf("DU fullscreen mode\n");
+            it8951_display_image_1bit_fullscreen(&dev, image_path, 0, brightness);
+        } else if (use_4bpp) {
+            printf("4bpp mode\n");
+            it8951_display_image_4bpp(&dev, image_path, 0, brightness, GC16_MODE);
+        } else if (diff_mode >= 0) {
             printf("%s refresh (border-smooth=%d)\n",
                    diff_mode == DIFF_MODE_HARD ? "hard"
-                   : (diff_mode == DIFF_MODE_FULLSCREEN ? "fullscreen" : "soft"),
+                   : (diff_mode == DIFF_MODE_FULLSCREEN ? "fullscreen"
+                   : (diff_mode == DIFF_MODE_DU ? "du" : "soft")),
                    border_smooth);
             it8951_display_image_diff(&dev, image_path, 0, brightness,
                                       diff_mode, border_smooth);
@@ -478,6 +610,10 @@ int main(int argc, char *argv[])
     if (do_quarter_flag)
         do_quarter(&dev);
 
+    if (do_edge_test_flag)
+        do_edge_test(&dev);
+    if (do_grid_test_flag)
+        do_grid_test(&dev);
     if (do_server) {
         printf("HTTP server not yet implemented in C version.\n");
         printf("Use the Python version for the API server.\n");

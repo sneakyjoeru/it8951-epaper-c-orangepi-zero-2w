@@ -160,6 +160,15 @@ sudo ./it8951 --cross 9 --cross-vertical
 sudo ./it8951 --quarter                 Top-left quarter black
 sudo ./it8951 --setup                   Configure OS (overlay + packages)
 sudo ./it8951 --set-vcom 2510           Set VCOM to -2.51V
+sudo ./it8951 --grid-test               1px grid lines every 50px (fidelity test)
+
+# Refresh modes (use with --image)
+sudo ./it8951 --image cal.png --soft            Regional GL16, no flash
+sudo ./it8951 --image cal.png --hard            Regional: flash changed area, then GL16
+sudo ./it8951 --image cal.png --du              Regional DU (1-bit, no flash, no ghosting)
+sudo ./it8951 --image cal.png --fullscreen      Full-screen GC16 clean refresh
+sudo ./it8951 --image cal.png --du-fullscreen   Full-screen DU (1-bit) clean refresh — sharp b/w
+sudo ./it8951 --image cal.png --soft --border-smooth 30
 ```
 
 ## Architecture
@@ -172,7 +181,9 @@ it8951-epaper-c/
 │   ├── it8951_driver.c     # Core SPI driver (GPIO, protocol, display)
 │   ├── it8951_text.c       # Text rendering (FreeType, supersampled)
 │   ├── it8951_image.c      # Image display (stb_image, dithered)
+│   ├── it8951_diff.c       # Regional differential update modes
 │   ├── stb_image.h         # Vendored header-only image library
+│   ├── stb_image_write.h   # Vendored PNG writer (last-image cache)
 │   └── main.c              # CLI entry point + patterns + OS setup
 ├── Makefile                # Build system
 └── README.md
